@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import pandas as pd
 from torchvision import transforms
 from PIL import Image
+from utils import (plot_image, cellboxes_to_boxes, non_max_suppression)
 
 class faceYoloDataset(Dataset):
     def __init__(self, csv_file, img_dir, label_dir, data_dir, S=7, B=2, C=2, transform=None):
@@ -28,7 +29,6 @@ class faceYoloDataset(Dataset):
                     float(x) if float(x) != int(float(x)) else int(x)
                     for x in label.replace("\n", "").split()
                 ]
-
                 boxes.append([class_label, x, y, width, height])
 
         img_path = os.path.join(self.img_dir, self.annotations.iloc[index, 0])
@@ -82,7 +82,6 @@ class faceYoloDataset(Dataset):
 
                 # Set one hot encoding for class_label
                 label_matrix[i, j, class_label] = 1
-
         return image, label_matrix
 
 def main():
@@ -90,7 +89,7 @@ def main():
     img_dir = "images"
     label_dir = "labels"
     data_dir = "data"
-    batch_size = 5
+    batch_size = 1
 
     class Compose(object):
         def __init__(self, transforms):
@@ -111,9 +110,12 @@ def main():
                            transform=transform
                            )
 
-    train_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
     for (image, label) in train_loader:
-        print(image[0], label[0])
+        for idx in range(8):
+            bboxes = cellboxes_to_boxes(label)
+            bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
+            plot_image(image[idx].permute(1,2,0), bboxes)
         break
 
 if __name__ == "__main__":
