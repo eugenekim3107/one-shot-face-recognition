@@ -7,10 +7,10 @@ from torchvision import transforms
 from PIL import Image
 
 class faceYoloDataset(Dataset):
-    def __init__(self, csv_file, img_dir, label_dir, S, B, C, transform=None):
-        self.annotations = pd.read_csv(csv_file)
-        self.img_dir = img_dir
-        self.label_dir = label_dir
+    def __init__(self, csv_file, img_dir, label_dir, data_dir, S=7, B=2, C=2, transform=None):
+        self.annotations = pd.read_csv(os.path.join(data_dir,csv_file))
+        self.img_dir = os.path.join(data_dir, img_dir)
+        self.label_dir = os.path.join(data_dir, label_dir)
         self.transform = transform
         self.S = S
         self.B = B
@@ -69,22 +69,55 @@ class faceYoloDataset(Dataset):
             # If no object already found for specific cell i,j
             # Note: This means we restrict to ONE object
             # per cell!
-            if label_matrix[i, j, 20] == 0:
+            if label_matrix[i, j, self.C] == 0:
                 # Set that there exists an object
-                label_matrix[i, j, 20] = 1
+                label_matrix[i, j, self.C] = 1
 
                 # Box coordinates
                 box_coordinates = torch.tensor(
                     [x_cell, y_cell, width_cell, height_cell]
                 )
 
-                label_matrix[i, j, 21:25] = box_coordinates
+                label_matrix[i, j, self.C+1:self.C+5] = box_coordinates
 
                 # Set one hot encoding for class_label
                 label_matrix[i, j, class_label] = 1
 
         return image, label_matrix
 
+def main():
+    csv_file = "faceYoloData.csv"
+    img_dir = "images"
+    label_dir = "labels"
+    data_dir = "data"
+    batch_size = 5
+
+    class Compose(object):
+        def __init__(self, transforms):
+            self.transforms = transforms
+
+        def __call__(self, img, bboxes):
+            for t in self.transforms:
+                img, bboxes = t(img), bboxes
+
+            return img, bboxes
+
+    transform = Compose([transforms.Resize((448, 448)), transforms.ToTensor()])
+
+    data = faceYoloDataset(csv_file=csv_file,
+                           img_dir=img_dir,
+                           label_dir=label_dir,
+                           data_dir=data_dir,
+                           transform=transform
+                           )
+
+    train_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
+    for (image, label) in train_loader:
+        print(image[0], label[0])
+        break
+
+if __name__ == "__main__":
+    main()
 
 
 
