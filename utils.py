@@ -91,7 +91,7 @@ def non_max_suppression(bboxes, iou_threshold, threshold, box_format="corners"):
 
 def mean_average_precision(
         pred_boxes, true_boxes, iou_threshold=0.5, box_format="midpoint",
-        num_classes=20
+        num_classes=2
 ):
     """
     Calculates mean average precision
@@ -295,11 +295,11 @@ def convert_cellboxes(predictions, S=7):
 
     predictions = predictions.to("cpu")
     batch_size = predictions.shape[0]
-    predictions = predictions.reshape(batch_size, 7, 7, 30)
-    bboxes1 = predictions[..., 21:25]
-    bboxes2 = predictions[..., 26:30]
+    predictions = predictions.reshape(batch_size, 7, 7, 12)
+    bboxes1 = predictions[..., 3:7]
+    bboxes2 = predictions[..., 8:12]
     scores = torch.cat(
-        (predictions[..., 20].unsqueeze(0), predictions[..., 25].unsqueeze(0)),
+        (predictions[..., 2].unsqueeze(0), predictions[..., 7].unsqueeze(0)),
         dim=0
     )
     best_box = scores.argmax(0).unsqueeze(-1)
@@ -309,9 +309,9 @@ def convert_cellboxes(predictions, S=7):
     y = 1 / S * (best_boxes[..., 1:2] + cell_indices.permute(0, 2, 1, 3))
     w_y = 1 / S * best_boxes[..., 2:4]
     converted_bboxes = torch.cat((x, y, w_y), dim=-1)
-    predicted_class = predictions[..., :20].argmax(-1).unsqueeze(-1)
-    best_confidence = torch.max(predictions[..., 20],
-                                predictions[..., 25]).unsqueeze(
+    predicted_class = predictions[..., :2].argmax(-1).unsqueeze(-1)
+    best_confidence = torch.max(predictions[..., 2],
+                                predictions[..., 7]).unsqueeze(
         -1
     )
     converted_preds = torch.cat(
