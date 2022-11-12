@@ -12,7 +12,7 @@ class YoloLoss(nn.Module):
     Calculate the loss for yolo (v1) model
     """
 
-    def __init__(self, S=7, B=2, C=20):
+    def __init__(self, S=7, B=2, C=2):
         super(YoloLoss, self).__init__()
         self.mse = nn.MSELoss(reduction="sum")
 
@@ -35,14 +35,14 @@ class YoloLoss(nn.Module):
         predictions = predictions.reshape(-1, self.S, self.S, self.C + self.B * 5)
 
         # Calculate IoU for the two predicted bounding boxes with target bbox
-        iou_b1 = intersection_over_union(predictions[..., 21:25], target[..., 21:25])
-        iou_b2 = intersection_over_union(predictions[..., 26:30], target[..., 21:25])
+        iou_b1 = intersection_over_union(predictions[..., 3:7], target[..., 3:7])
+        iou_b2 = intersection_over_union(predictions[..., 8:12], target[..., 3:7])
         ious = torch.cat([iou_b1.unsqueeze(0), iou_b2.unsqueeze(0)], dim=0)
 
         # Take the box with highest IoU out of the two prediction
         # Note that bestbox will be indices of 0, 1 for which bbox was best
         iou_maxes, bestbox = torch.max(ious, dim=0)
-        exists_box = target[..., 20].unsqueeze(3)  # in paper this is Iobj_i
+        exists_box = target[..., 2].unsqueeze(3)  # in paper this is Iobj_i
 
         # ======================== #
         #   FOR BOX COORDINATES    #
@@ -52,12 +52,12 @@ class YoloLoss(nn.Module):
         # predictions, which is the one with highest Iou calculated previously.
         box_predictions = exists_box * (
             (
-                bestbox * predictions[..., 26:30]
-                + (1 - bestbox) * predictions[..., 21:25]
+                bestbox * predictions[..., 8:12]
+                + (1 - bestbox) * predictions[..., 3:7]
             )
         )
 
-        box_targets = exists_box * target[..., 21:25]
+        box_targets = exists_box * target[..., 3:7]
 
         # Take sqrt of width, height of boxes to ensure that
         box_predictions[..., 2:4] = torch.sign(box_predictions[..., 2:4]) * torch.sqrt(
@@ -76,12 +76,12 @@ class YoloLoss(nn.Module):
 
         # pred_box is the confidence score for the bbox with highest IoU
         pred_box = (
-            bestbox * predictions[..., 25:26] + (1 - bestbox) * predictions[..., 20:21]
+            bestbox * predictions[..., 7:8] + (1 - bestbox) * predictions[..., 2:3]
         )
 
         object_loss = self.mse(
             torch.flatten(exists_box * pred_box),
-            torch.flatten(exists_box * target[..., 20:21]),
+            torch.flatten(exists_box * target[..., 2:3]),
         )
 
         # ======================= #
@@ -95,13 +95,13 @@ class YoloLoss(nn.Module):
         #)
 
         no_object_loss = self.mse(
-            torch.flatten((1 - exists_box) * predictions[..., 20:21], start_dim=1),
-            torch.flatten((1 - exists_box) * target[..., 20:21], start_dim=1),
+            torch.flatten((1 - exists_box) * predictions[..., 2:3], start_dim=1),
+            torch.flatten((1 - exists_box) * target[..., 2:3], start_dim=1),
         )
 
         no_object_loss += self.mse(
-            torch.flatten((1 - exists_box) * predictions[..., 25:26], start_dim=1),
-            torch.flatten((1 - exists_box) * target[..., 20:21], start_dim=1)
+            torch.flatten((1 - exists_box) * predictions[..., 7:8], start_dim=1),
+            torch.flatten((1 - exists_box) * target[..., 2:3], start_dim=1)
         )
 
         # ================== #
@@ -109,8 +109,8 @@ class YoloLoss(nn.Module):
         # ================== #
 
         class_loss = self.mse(
-            torch.flatten(exists_box * predictions[..., :20], end_dim=-2,),
-            torch.flatten(exists_box * target[..., :20], end_dim=-2,),
+            torch.flatten(exists_box * predictions[..., :2], end_dim=-2,),
+            torch.flatten(exists_box * target[..., :2], end_dim=-2,),
         )
 
         loss = (

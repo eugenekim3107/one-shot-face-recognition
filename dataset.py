@@ -32,7 +32,7 @@ class faceYoloDataset(Dataset):
                 boxes.append([class_label, x, y, width, height])
 
         img_path = os.path.join(self.img_dir, self.annotations.iloc[index, 0])
-        image = Image.open(img_path)
+        image = Image.open(img_path).convert("RGB")
         boxes = torch.tensor(boxes)
 
         if self.transform:
@@ -89,7 +89,7 @@ def main():
     img_dir = "images"
     label_dir = "labels"
     data_dir = "data"
-    batch_size = 1
+    batch_size = 13
 
     class Compose(object):
         def __init__(self, transforms):
@@ -112,10 +112,11 @@ def main():
 
     train_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
     for (image, label) in train_loader:
-        for idx in range(8):
-            bboxes = cellboxes_to_boxes(label)
-            bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
-            plot_image(image[idx].permute(1,2,0), bboxes)
+        # for idx in range(8):
+        #     bboxes = cellboxes_to_boxes(label)
+        #     bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
+        #     plot_image(image[idx].permute(1,2,0), bboxes)
+        print(image.shape, label.shape)
         break
 
 if __name__ == "__main__":
