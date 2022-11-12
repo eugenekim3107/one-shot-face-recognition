@@ -198,9 +198,6 @@ def mean_average_precision(
 
 def plot_image(image, boxes):
     """Plots predicted bounding boxes on the image"""
-    # cmap = plt.get_cmap("tab20b")
-    # class_labels = config.COCO_LABELS if config.DATASET == 'COCO' else config.PASCAL_CLASSES
-    # colors = [cmap(i) for i in np.linspace(0, 1, len(class_labels))]
     im = np.array(image)
     height, width, _ = im.shape
 
@@ -212,34 +209,25 @@ def plot_image(image, boxes):
     # box[0] is x midpoint, box[2] is width
     # box[1] is y midpoint, box[3] is height
 
-    # Create a Rectangle patch
+    # Create a Rectangle potch
     for box in boxes:
-        assert len(
-            box) == 6, "box should contain class pred, confidence, x, y, width, height"
-        class_pred = box[0]
         box = box[2:]
+        assert len(box) == 4, "Got more values than in x, y, w, h, in a box!"
         upper_left_x = box[0] - box[2] / 2
         upper_left_y = box[1] - box[3] / 2
         rect = patches.Rectangle(
             (upper_left_x * width, upper_left_y * height),
             box[2] * width,
             box[3] * height,
-            linewidth=2,
-            #edgecolor=colors[int(class_pred)],
+            linewidth=1,
+            edgecolor="r",
             facecolor="none",
         )
         # Add the patch to the Axes
         ax.add_patch(rect)
-        # plt.text(
-        #     upper_left_x * width,
-        #     upper_left_y * height,
-        #     s=class_labels[int(class_pred)],
-        #     color="white",
-        #     verticalalignment="top",
-        #     bbox={"color": colors[int(class_pred)], "pad": 0},
-        # )
 
     plt.show()
+
 
 def get_bboxes(
         loader,
@@ -247,8 +235,8 @@ def get_bboxes(
         iou_threshold,
         threshold,
         pred_format="cells",
-        box_format="midpoint"
-        #device="cuda",
+        box_format="midpoint",
+        device="cuda",
 ):
     all_pred_boxes = []
     all_true_boxes = []
@@ -258,8 +246,8 @@ def get_bboxes(
     train_idx = 0
 
     for batch_idx, (x, labels) in enumerate(loader):
-        #x = x.to(device)
-        #labels = labels.to(device)
+        x = x.to(device)
+        labels = labels.to(device)
 
         with torch.no_grad():
             predictions = model(x)
@@ -307,11 +295,11 @@ def convert_cellboxes(predictions, S=7):
 
     predictions = predictions.to("cpu")
     batch_size = predictions.shape[0]
-    predictions = predictions.reshape(batch_size, 7, 7, 12)
-    bboxes1 = predictions[..., 2:7]
-    bboxes2 = predictions[..., 7:12]
+    predictions = predictions.reshape(batch_size, 7, 7, 30)
+    bboxes1 = predictions[..., 21:25]
+    bboxes2 = predictions[..., 26:30]
     scores = torch.cat(
-        (predictions[..., 2].unsqueeze(0), predictions[..., 7].unsqueeze(0)),
+        (predictions[..., 20].unsqueeze(0), predictions[..., 25].unsqueeze(0)),
         dim=0
     )
     best_box = scores.argmax(0).unsqueeze(-1)
@@ -321,9 +309,9 @@ def convert_cellboxes(predictions, S=7):
     y = 1 / S * (best_boxes[..., 1:2] + cell_indices.permute(0, 2, 1, 3))
     w_y = 1 / S * best_boxes[..., 2:4]
     converted_bboxes = torch.cat((x, y, w_y), dim=-1)
-    predicted_class = predictions[..., :2].argmax(-1).unsqueeze(-1)
-    best_confidence = torch.max(predictions[..., 2],
-                                predictions[..., 7]).unsqueeze(
+    predicted_class = predictions[..., :20].argmax(-1).unsqueeze(-1)
+    best_confidence = torch.max(predictions[..., 20],
+                                predictions[..., 25]).unsqueeze(
         -1
     )
     converted_preds = torch.cat(
@@ -358,4 +346,3 @@ def load_checkpoint(checkpoint, model, optimizer):
     print("=> Loading checkpoint")
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
-
