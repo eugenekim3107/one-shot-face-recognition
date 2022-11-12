@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from collections import Counter
+import config
 
 
 def intersection_over_union(boxes_preds, boxes_labels, box_format="midpoint"):
