@@ -337,12 +337,13 @@ def cellboxes_to_boxes(out, S=7):
     return all_bboxes
 
 
-def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
+def save_checkpoint(checkpoint, filename="my_checkpoint.pth.tar"):
     print("=> Saving checkpoint")
-    torch.save(state, filename)
+    torch.save(checkpoint, filename)
 
 
 def load_checkpoint(checkpoint, model, optimizer):
     print("=> Loading checkpoint")
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
+    return checkpoint["epoch"]

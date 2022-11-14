@@ -6,6 +6,7 @@ import torch
 import torchvision.transforms as transforms
 import torch.optim as optim
 import torchvision.transforms.functional as FT
+import vessl
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from model import Yolov1
@@ -23,6 +24,8 @@ from utils import (
 from loss import YoloLoss
 import os
 
+vessl.init()
+
 seed = 123
 torch.manual_seed(seed)
 
@@ -35,7 +38,7 @@ EPOCHS = 100
 NUM_WORKERS = 4
 PIN_MEMORY = True
 LOAD_MODEL = False
-LOAD_MODEL_FILE = "overfit.pth.tar"
+LOAD_MODEL_FILE = "model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
 
@@ -54,7 +57,8 @@ class Compose(object):
 transform = Compose([transforms.Resize((448, 448)), transforms.ToTensor(),])
 
 
-def train_fn(train_loader, model, optimizer, loss_fn):
+def train_fn(train_loader, model, optimizer, loss_fn, epoch, start_epoch):
+    model.train()
     loop = tqdm(train_loader, leave=True)
     mean_loss = []
 
@@ -70,7 +74,33 @@ def train_fn(train_loader, model, optimizer, loss_fn):
         # update progress bar
         loop.set_postfix(loss=loss.item())
 
-    print(f"Mean loss was {sum(mean_loss)/len(mean_loss)}")
+    vessl.log(
+        step=epoch + start_epoch + 1,
+        payload={'train_loss': sum(mean_loss)/len(mean_loss)}
+    )
+
+    print(f"Mean training loss was {sum(mean_loss)/len(mean_loss)}")
+
+def test_fn(test_loader, model, loss_fn, epoch, start_epoch):
+    model.eval()
+    loop = tqdm(test_loader, leave=True)
+    mean_test_loss = []
+
+    with torch.no_grad():
+        for batch_idx, (x, y) in enumerate(loop):
+            x, y = x.to(DEVICE), y.to(DEVICE)
+            out = model(x)
+            loss = loss_fn(out, y)
+            mean_test_loss.append(loss.item())
+
+            loop.set_postfix(loss=loss.item())
+
+    vessl.log(
+        step=epoch + start_epoch + 1,
+        payload={'test_loss': sum(mean_test_loss)/len(mean_test_loss)}
+    )
+
+    print(f"Mean test loss was {sum(mean_test_loss)/len(mean_test_loss)}")
 
 
 def main():
@@ -81,9 +111,12 @@ def main():
     loss_fn = YoloLoss()
 
     if LOAD_MODEL:
-        load_checkpoint(torch.load(LOAD_MODEL_FILE), model, optimizer)
+        checkpoint = torch.load(LOAD_MODEL_FILE)
+        start_epoch = load_checkpoint(checkpoint, model, optimizer)
+    else:
+        start_epoch = 0
 
-    train_dataset = faceYoloDataset(
+    dataset = faceYoloDataset(
         "faceYoloData.csv",
         transform=transform,
         img_dir=IMG_DIR,
@@ -91,9 +124,7 @@ def main():
         data_dir="data/data"
     )
 
-    test_dataset = faceYoloDataset(
-        "faceYoloData.csv", transform=transform, img_dir=IMG_DIR, label_dir=LABEL_DIR, data_dir="data/data"
-    )
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1300, 209])
 
     train_loader = DataLoader(
         dataset=train_dataset,
@@ -128,21 +159,41 @@ def main():
             train_loader, model, iou_threshold=0.5, threshold=0.4
         )
 
+        pred_boxes_test, target_boxes_test = get_bboxes(
+            test_loader, model, iou_threshold=0.5, threshold=0.4
+        )
+
         mean_avg_prec = mean_average_precision(
             pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
         )
-        print(f"Train mAP: {mean_avg_prec}")
 
-        #if mean_avg_prec > 0.9:
-        #    checkpoint = {
-        #        "state_dict": model.state_dict(),
-        #        "optimizer": optimizer.state_dict(),
-        #    }
-        #    save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
-        #    import time
-        #    time.sleep(10)
+        mean_avg_prec_test = mean_average_precision(
+            pred_boxes_test, target_boxes_test, iou_threshold=0.5, box_format="midpoint"
+        )
 
-        train_fn(train_loader, model, optimizer, loss_fn)
+        print(f"[{epoch+1}] Train mAP: {mean_avg_prec}")
+        print(f"[{epoch+1}] Test mAP: {mean_avg_prec_test}")
+        vessl.log(
+            step=epoch + start_epoch + 1,
+            payload={"train_mAP": float(mean_avg_prec)}
+        )
+        vessl.log(
+            step=epoch + start_epoch + 1,
+            payload={"test_mAP": float(mean_avg_prec_test)}
+        )
+
+        if mean_avg_prec > 0.9:
+           checkpoint = {
+               "state_dict": model.state_dict(),
+               "optimizer": optimizer.state_dict(),
+               "start_epoch": epoch
+           }
+           save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
+           import time
+           time.sleep(10)
+
+        train_fn(train_loader, model, optimizer, loss_fn, epoch, start_epoch)
+        test_fn(test_loader, model, loss_fn, epoch, start_epoch)
 
 
 if __name__ == "__main__":

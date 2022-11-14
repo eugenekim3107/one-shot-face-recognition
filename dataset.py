@@ -111,6 +111,7 @@ def main():
                            )
 
     train_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
+    print(len(data))
     for (image, label) in train_loader:
         # for idx in range(8):
         #     bboxes = cellboxes_to_boxes(label)
