@@ -3,6 +3,7 @@ Main file for training Yolo model on Pascal VOC dataset
 """
 
 import torch
+import time
 import torchvision.transforms as transforms
 import torch.optim as optim
 import torchvision.transforms.functional as FT
@@ -144,6 +145,7 @@ def main():
         drop_last=True,
     )
 
+    epoch = 0
     for epoch in range(EPOCHS):
         # for x, y in train_loader:
         #    x = x.to(DEVICE)
@@ -189,12 +191,17 @@ def main():
                "start_epoch": epoch
            }
            save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
-           import time
            time.sleep(10)
 
         train_fn(train_loader, model, optimizer, loss_fn, epoch, start_epoch)
         test_fn(test_loader, model, loss_fn, epoch, start_epoch)
-
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "start_epoch": epoch
+    }
+    save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
+    time.sleep(10)
 
 if __name__ == "__main__":
     main()
