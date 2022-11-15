@@ -35,13 +35,14 @@ LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
 BATCH_SIZE = 20 # 64 in original paper but I don't have that much vram, grad accum?
 WEIGHT_DECAY = 0
-EPOCHS = 100
+EPOCHS = 5
 NUM_WORKERS = 4
 PIN_MEMORY = True
 LOAD_MODEL = False
 LOAD_MODEL_FILE = "model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
+DIR_NAME = "output"
 
 
 class Compose(object):
@@ -200,7 +201,7 @@ def main():
         "optimizer": optimizer.state_dict(),
         "start_epoch": epoch
     }
-    save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
+    save_checkpoint(DIR_NAME, checkpoint, filename="model1.pth.tar")
     time.sleep(10)
 
 if __name__ == "__main__":

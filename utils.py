@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from collections import Counter
+import os
 
 
 def intersection_over_union(boxes_preds, boxes_labels, box_format="midpoint"):
@@ -337,9 +338,12 @@ def cellboxes_to_boxes(out, S=7):
     return all_bboxes
 
 
-def save_checkpoint(checkpoint, filename="my_checkpoint.pth.tar"):
+def save_checkpoint(dir_name, checkpoint, filename="my_checkpoint.pth.tar"):
     print("=> Saving checkpoint")
-    torch.save(checkpoint, filename)
+    if not os.path.exists(dir_name):
+        print(f" [*] Make directories : {dir_name}")
+        os.makedirs(dir_name)
+    torch.save(checkpoint, os.path.join(dir_name,filename))
 
 
 def load_checkpoint(checkpoint, model, optimizer):
