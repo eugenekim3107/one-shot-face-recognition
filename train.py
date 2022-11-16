@@ -42,7 +42,7 @@ LOAD_MODEL = False
 LOAD_MODEL_FILE = "model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
-DIR_NAME = "output"
+DIR_NAME = "src"
 
 
 class Compose(object):
@@ -191,7 +191,7 @@ def main():
                "optimizer": optimizer.state_dict(),
                "start_epoch": epoch
            }
-           save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
+           save_checkpoint(DIR_NAME, checkpoint, filename=LOAD_MODEL_FILE)
            time.sleep(10)
 
         train_fn(train_loader, model, optimizer, loss_fn, epoch, start_epoch)
@@ -201,7 +201,7 @@ def main():
         "optimizer": optimizer.state_dict(),
         "start_epoch": epoch
     }
-    save_checkpoint(DIR_NAME, checkpoint, filename="model1.pth.tar")
+    save_checkpoint(DIR_NAME, checkpoint, filename=LOAD_MODEL_FILE)
     time.sleep(10)
 
 if __name__ == "__main__":
