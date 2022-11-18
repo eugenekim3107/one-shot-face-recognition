@@ -33,7 +33,7 @@ torch.manual_seed(seed)
 # Hyperparameters etc.
 LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 20 # 64 in original paper but I don't have that much vram, grad accum?
+BATCH_SIZE = 20
 WEIGHT_DECAY = 0
 EPOCHS = 5
 NUM_WORKERS = 4
@@ -42,7 +42,7 @@ LOAD_MODEL = False
 LOAD_MODEL_FILE = "model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
-DIR_NAME = "src"
+DIR_NAME = "output"
 
 
 class Compose(object):

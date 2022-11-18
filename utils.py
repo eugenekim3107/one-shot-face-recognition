@@ -340,6 +340,7 @@ def cellboxes_to_boxes(out, S=7):
 
 def save_checkpoint(dir_name, checkpoint, filename="my_checkpoint.pth.tar"):
     print("=> Saving checkpoint")
+    os.chdir('..')
     if not os.path.exists(dir_name):
         print(f" [*] Make directories : {dir_name}")
         os.makedirs(dir_name)
