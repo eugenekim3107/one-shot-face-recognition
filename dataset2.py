@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader
 import pandas as pd
 from torchvision import transforms
 from PIL import Image
-from utils import (plot_image, cellboxes_to_boxes, non_max_suppression)
 
 class faceYoloDataset(Dataset):
     def __init__(self, csv_file, img_dir, label_dir, data_dir, S=7, B=2, C=2, transform=None):
@@ -36,12 +35,12 @@ class faceYoloDataset(Dataset):
         boxes = torch.tensor(boxes)
 
         if self.transform:
+            # image = self.transform(image)
             image, boxes = self.transform(image, boxes)
 
         # Convert To Cells
         label_matrix = torch.zeros((self.S, self.S, self.C + 5 * self.B))
         for box in boxes:
-            print(box)
             class_label, x, y, width, height = box.tolist()
             class_label = int(class_label)
 
@@ -83,45 +82,3 @@ class faceYoloDataset(Dataset):
                 # Set one hot encoding for class_label
                 label_matrix[i, j, class_label] = 1
         return image, label_matrix
-
-def main():
-    csv_file = "faceYoloData.csv"
-    img_dir = "images"
-    label_dir = "labels"
-    data_dir = "data"
-    batch_size = 1
-
-    class Compose(object):
-        def __init__(self, transforms):
-            self.transforms = transforms
-
-        def __call__(self, img, bboxes):
-            for t in self.transforms:
-                img, bboxes = t(img), bboxes
-
-            return img, bboxes
-
-    transform = Compose([transforms.Resize((448, 448)), transforms.ToTensor()])
-
-    data = faceYoloDataset(csv_file=csv_file,
-                           img_dir=img_dir,
-                           label_dir=label_dir,
-                           data_dir=data_dir,
-                           transform=transform
-                           )
-
-    train_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
-    for (image, label) in train_loader:
-        # for idx in range(8):
-        #     bboxes = cellboxes_to_boxes(label)
-        #     bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
-        #     plot_image(image[idx].permute(1,2,0), bboxes)
-        break
-
-if __name__ == "__main__":
-    main()
-
-
-
-
-
