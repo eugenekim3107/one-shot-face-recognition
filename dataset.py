@@ -112,10 +112,10 @@ def main():
 
     train_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
     for (image, label) in train_loader:
-        # for idx in range(8):
-        #     bboxes = cellboxes_to_boxes(label)
-        #     bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
-        #     plot_image(image[idx].permute(1,2,0), bboxes)
+        for idx in range(8):
+            bboxes = cellboxes_to_boxes(label)
+            bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
+            plot_image(image[idx].permute(1,2,0), bboxes)
         break
 
 if __name__ == "__main__":
