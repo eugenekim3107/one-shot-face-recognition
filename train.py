@@ -11,7 +11,7 @@ import vessl
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from model import Yolov1
-from dataset import faceYoloDataset
+from dataset import faceYoloDataset, WIDERFace
 from utils import (
     non_max_suppression,
     mean_average_precision,
@@ -118,13 +118,15 @@ def main():
     else:
         start_epoch = 0
 
-    dataset = faceYoloDataset(
-        "faceYoloData.csv",
-        transform=transform,
-        img_dir=IMG_DIR,
-        label_dir=LABEL_DIR,
-        data_dir="data/data"
-    )
+    # dataset = faceYoloDataset(
+    #     "faceYoloData.csv",
+    #     transform=transform,
+    #     img_dir=IMG_DIR,
+    #     label_dir=LABEL_DIR,
+    #     data_dir="data/data"
+    # )
+    train_dataset = WIDERFace(root="data/", split="train", transform=transform)
+    test_dataset = WIDERFace(root="data/", split="val", transform=transform)
 
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1300, 209])
 
