@@ -33,7 +33,7 @@ torch.manual_seed(seed)
 # Hyperparameters etc.
 LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 20
+BATCH_SIZE = 300
 WEIGHT_DECAY = 0
 EPOCHS = 50
 NUM_WORKERS = 4
@@ -125,10 +125,8 @@ def main():
     #     label_dir=LABEL_DIR,
     #     data_dir="data/data"
     # )
-    train_dataset = WIDERFace(root="data/", split="train", transform=transform)
-    test_dataset = WIDERFace(root="data/", split="val", transform=transform)
-
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1300, 209])
+    train_dataset = WIDERFace(root="data/data/", split="train", transform=transform)
+    test_dataset = WIDERFace(root="data/data/", split="val", transform=transform)
 
     train_loader = DataLoader(
         dataset=train_dataset,
@@ -136,7 +134,7 @@ def main():
         num_workers=NUM_WORKERS,
         pin_memory=PIN_MEMORY,
         shuffle=True,
-        drop_last=True,
+        drop_last=False,
     )
 
     test_loader = DataLoader(
@@ -144,8 +142,8 @@ def main():
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         pin_memory=PIN_MEMORY,
-        shuffle=True,
-        drop_last=True,
+        shuffle=False,
+        drop_last=False,
     )
 
     epoch = 0
