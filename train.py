@@ -125,8 +125,8 @@ def main():
     #     label_dir=LABEL_DIR,
     #     data_dir="data/data"
     # )
-    train_dataset = WIDERFace(root="data/data/", split="train", transform=transform)
-    test_dataset = WIDERFace(root="data/data/", split="val", transform=transform)
+    train_dataset = WIDERFace(root="data/", split="train", transform=transform)
+    test_dataset = WIDERFace(root="data/", split="val", transform=transform)
 
     train_loader = DataLoader(
         dataset=train_dataset,

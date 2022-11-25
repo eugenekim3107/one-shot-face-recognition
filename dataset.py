@@ -173,6 +173,8 @@ class WIDERFace(Dataset):
                 if file_name_line:
                     img_path = os.path.join(self.root, "WIDER_" + self.split,
                                             "images", line)
+                    while not os.path.isfile(img_path):
+                        continue
                     img_path = abspath(expanduser(img_path))
                     file_name_line = False
                     num_boxes_line = True
