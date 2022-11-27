@@ -44,7 +44,6 @@ class faceYoloDataset(Dataset):
         # Convert To Cells
         label_matrix = torch.zeros((self.S, self.S, self.C + 5 * self.B))
         for box in boxes:
-            print(box)
             class_label, x, y, width, height = box.tolist()
             class_label = int(class_label)
 
@@ -136,7 +135,6 @@ class WIDERFace(Dataset):
                 width * self.S,
                 height * self.S,
             )
-
             if label_matrix[i, j, self.C] == 0:
                 # Set that there exists an object
                 label_matrix[i, j, self.C] = 1
@@ -173,7 +171,7 @@ class WIDERFace(Dataset):
                 if file_name_line:
                     img_path = os.path.join(self.root, "WIDER_" + self.split,
                                             "images", line)
-                    while not os.path.isfile(img_path):
+                    if not os.path.isfile(img_path):
                         continue
                     img_path = abspath(expanduser(img_path))
                     file_name_line = False
@@ -225,15 +223,24 @@ def main():
             return img, bboxes
 
     transform = Compose([transforms.Resize((448, 448)), transforms.ToTensor()])
+    dataset = faceYoloDataset(
+        "faceYoloData.csv",
+        transform=transform,
+        img_dir=img_dir,
+        label_dir=label_dir,
+        data_dir="data"
+    )
+    print(len(dataset))
     data = WIDERFace(root="data/", split="val", transform=transform)
-    batch_size = 1
+    batch_size = 10
     train_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
     for x, y in train_loader:
-        for idx in range(1):
+        for idx in range(10):
             bboxes = cellboxes_to_boxes(y)
             bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5,
                                          threshold=0.4, box_format="midpoint")
             plot_image(x[idx].permute(1, 2, 0).to("cpu"), bboxes)
+
         break
 
 if __name__ == "__main__":

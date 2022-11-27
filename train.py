@@ -1,5 +1,5 @@
 """
-Main file for training Yolo model on Pascal VOC dataset
+Main file for training Yolo model on WIDERFace dataset
 """
 
 import torch
@@ -33,13 +33,13 @@ torch.manual_seed(seed)
 # Hyperparameters etc.
 LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 300
+BATCH_SIZE = 24
 WEIGHT_DECAY = 0
-EPOCHS = 50
+EPOCHS = 30
 NUM_WORKERS = 4
 PIN_MEMORY = True
-LOAD_MODEL = False
-LOAD_MODEL_FILE = "model1.pth.tar"
+LOAD_MODEL = True
+LOAD_MODEL_FILE = "src/model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
 DIR_NAME = "output"
@@ -118,15 +118,17 @@ def main():
     else:
         start_epoch = 0
 
-    # dataset = faceYoloDataset(
-    #     "faceYoloData.csv",
-    #     transform=transform,
-    #     img_dir=IMG_DIR,
-    #     label_dir=LABEL_DIR,
-    #     data_dir="data/data"
-    # )
-    train_dataset = WIDERFace(root="data/", split="train", transform=transform)
-    test_dataset = WIDERFace(root="data/", split="val", transform=transform)
+    dataset = faceYoloDataset(
+        "faceYoloData.csv",
+        transform=transform,
+        img_dir=IMG_DIR,
+        label_dir=LABEL_DIR,
+        data_dir="data/data"
+    )
+
+    # train_dataset = WIDERFace(root="data/data/", split="train", transform=transform)
+    # test_dataset = WIDERFace(root="data/data/", split="val", transform=transform)
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1200,309])
 
     train_loader = DataLoader(
         dataset=train_dataset,
