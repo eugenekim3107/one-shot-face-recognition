@@ -31,15 +31,15 @@ seed = 123
 torch.manual_seed(seed)
 
 # Hyperparameters etc.
-LEARNING_RATE = 2e-5
+LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 24
+BATCH_SIZE = 50
 WEIGHT_DECAY = 0
-EPOCHS = 30
+EPOCHS = 50
 NUM_WORKERS = 4
 PIN_MEMORY = True
 LOAD_MODEL = True
-LOAD_MODEL_FILE = "src/model1.pth.tar"
+LOAD_MODEL_FILE = "model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
 DIR_NAME = "output"
@@ -113,22 +113,22 @@ def main():
     loss_fn = YoloLoss()
 
     if LOAD_MODEL:
-        checkpoint = torch.load(LOAD_MODEL_FILE)
+        checkpoint = torch.load(os.path.join("src",LOAD_MODEL_FILE))
         start_epoch = load_checkpoint(checkpoint, model, optimizer)
     else:
         start_epoch = 0
 
-    dataset = faceYoloDataset(
-        "faceYoloData.csv",
-        transform=transform,
-        img_dir=IMG_DIR,
-        label_dir=LABEL_DIR,
-        data_dir="data/data"
-    )
+    # dataset = faceYoloDataset(
+    #     "faceYoloData.csv",
+    #     transform=transform,
+    #     img_dir=IMG_DIR,
+    #     label_dir=LABEL_DIR,
+    #     data_dir="data/data"
+    # )
 
-    # train_dataset = WIDERFace(root="data/data/", split="train", transform=transform)
-    # test_dataset = WIDERFace(root="data/data/", split="val", transform=transform)
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1200,309])
+    train_dataset = WIDERFace(root="data/data/", split="train", transform=transform)
+    test_dataset = WIDERFace(root="data/data/", split="val", transform=transform)
+    # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1200,309])
 
     train_loader = DataLoader(
         dataset=train_dataset,
@@ -148,7 +148,6 @@ def main():
         drop_last=False,
     )
 
-    epoch = 0
     for epoch in range(EPOCHS):
         # for x, y in train_loader:
         #    x = x.to(DEVICE)
@@ -176,8 +175,8 @@ def main():
             pred_boxes_test, target_boxes_test, iou_threshold=0.5, box_format="midpoint"
         )
 
-        print(f"[{epoch+1}] Train mAP: {mean_avg_prec}")
-        print(f"[{epoch+1}] Test mAP: {mean_avg_prec_test}")
+        print(f"[{start_epoch+epoch+1}] Train mAP: {mean_avg_prec}")
+        print(f"[{start_epoch+epoch+1}] Test mAP: {mean_avg_prec_test}")
         vessl.log(
             step=epoch + start_epoch + 1,
             payload={"train_mAP": float(mean_avg_prec)}
@@ -187,7 +186,7 @@ def main():
             payload={"test_mAP": float(mean_avg_prec_test)}
         )
 
-        if mean_avg_prec > 0.9:
+        if mean_avg_prec > 0.98:
            checkpoint = {
                "state_dict": model.state_dict(),
                "optimizer": optimizer.state_dict(),
