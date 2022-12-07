@@ -1,7 +1,3 @@
-"""
-Main file for training Yolo model on WIDERFace dataset
-"""
-
 import torch
 import time
 import torchvision.transforms as transforms
