@@ -2,15 +2,18 @@ import torch
 import os
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from torchvision.transforms import functional as FT
 import pandas as pd
-from torchvision import transforms
+from torchvision import transforms as T
 from PIL import Image
 from utils import (plot_image, cellboxes_to_boxes, non_max_suppression)
 from os.path import abspath, expanduser
 from typing import Dict, List, Union
 import numpy as np
+from torchvision.utils import draw_bounding_boxes
+import matplotlib.pyplot as plt
 
-class faceYoloDataset(Datasset):
+class faceYoloDataset(Dataset):
     def __init__(self, csv_file, img_dir, label_dir, data_dir, S=7, B=2, C=2, transform=None):
         self.annotations = pd.read_csv(os.path.join(data_dir,csv_file))
         self.img_dir = os.path.join(data_dir, img_dir)
@@ -86,17 +89,15 @@ class faceYoloDataset(Datasset):
                 label_matrix[i, j, class_label] = 1
         return image, label_matrix
 
+
 class WIDERFace(Dataset):
     BASE_FOLDER = "widerface"
 
-    def __init__(self, root, split="train", S=7, B=2, C=2, transform=None):
+    def __init__(self, root, split="train", transform=None):
         # check arguments
         self.root = os.path.join(root, self.BASE_FOLDER)
         self.transform = transform
         self.split = split
-        self.S = S
-        self.B = B
-        self.C = C
         self.img_info: List[Dict[str, Union[str, Dict[str, torch.Tensor]]]] = []
 
         if self.split in ("train", "val"):
@@ -110,45 +111,27 @@ class WIDERFace(Dataset):
         img_h = img_shape.shape[0]
         img_w = img_shape.shape[1]
         boxes = self.img_info[index]["annotations"]["bbox"]
-        boxes[:, 1] += (boxes[:, 3] / 2)
-        boxes[:, 2] += (boxes[:, 4] / 2)
-        boxes[:, 1] /= img_w
-        boxes[:, 2] /= img_h
-        boxes[:, 3] /= img_w
-        boxes[:, 4] /= img_h
+        boxes[:, 0] /= img_w
+        boxes[:, 1] /= img_h
+        boxes[:, 2] /= img_w
+        boxes[:, 3] /= img_h
+
+        new_boxes = []  # convert from xywh to xyxy
+        for box in boxes:
+            xmin = box[0]
+            xmax = xmin + box[2]
+            ymin = box[1]
+            ymax = ymin + box[3]
+            new_boxes.append([xmin, ymin, xmax, ymax])
+
+        new_boxes = torch.tensor(new_boxes, dtype=torch.float32)
 
         if self.transform is not None:
-            img, boxes = self.transform(img, boxes)
+            img, new_boxes = self.transform(img, new_boxes)
 
-        label_matrix = torch.zeros((self.S, self.S, self.C + 5 * self.B))
-
-        for box in boxes:
-            class_label, x, y, width, height = box.tolist()
-            # find x,y,w,h that are proportional
-            class_label = int(class_label)
-
-            # i,j represents the cell row and cell column
-            i, j = int(self.S * y), int(self.S * x)
-            x_cell, y_cell = self.S * x - j, self.S * y - i
-
-            width_cell, height_cell = (
-                width * self.S,
-                height * self.S,
-            )
-            if label_matrix[i, j, self.C] == 0:
-                # Set that there exists an object
-                label_matrix[i, j, self.C] = 1
-
-                # Box coordinates
-                box_coordinates = torch.tensor(
-                    [x_cell, y_cell, width_cell, height_cell]
-                )
-
-                label_matrix[i, j, self.C + 1:self.C + 5] = box_coordinates
-
-                # Set one hot encoding for class_label
-                label_matrix[i, j, class_label] = 1
-        return img, label_matrix
+        label = {"boxes": new_boxes,
+                 "label": torch.tensor([0 for i in range(new_boxes.size(0))])}
+        return img, label
 
     def __len__(self):
         return len(self.img_info)
@@ -188,12 +171,12 @@ class WIDERFace(Dataset):
                     if box_counter >= num_boxes:
                         box_annotation_line = False
                         file_name_line = True
-                        labels_tensor = torch.tensor(labels)[:, 0:4]
+                        labels_tensor = torch.tensor(labels)[:, 0:4].float()
                         self.img_info.append(
                             {
                                 "img_path": img_path,
                                 "annotations": {
-                                    "bbox": torch.cat((torch.ones(labels_tensor.shape[0], 1),labels_tensor), axis=1)
+                                    "bbox": labels_tensor
                                     # x, y, width, height
                                 },
                             }
@@ -204,44 +187,102 @@ class WIDERFace(Dataset):
                     raise RuntimeError(
                         f"Error parsing annotation file {filepath}")
 
+class Compose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, img, bboxes):
+        for t in self.transforms:
+            img, bboxes = t(img), bboxes
+
+        return img, bboxes
+
+class Compose2(object):
+    def __init__(self, train=False):
+        if train:
+            self.transforms = [
+                T.Resize(size=(400, 400)),
+                T.ToTensor(),
+                T.RandomHorizontalFlip(p=0.3),
+                T.RandomVerticalFlip(p=0.3),
+            ]
+        else:
+            self.transforms = [T.Resize(size=(400, 400)), T.ToTensor()]
+
+    def __call__(self, img, bboxes):
+        for t in self.transforms:
+            img, bboxes = t(img), bboxes
+
+        return img, bboxes
+
+
 
 def main():
-    csv_file = "faceYoloData.csv"
-    img_dir = "images"
-    label_dir = "labels"
-    data_dir = "data"
-    batch_size = 1
 
-    class Compose(object):
-        def __init__(self, transforms):
-            self.transforms = transforms
+    ### For YOLO Dataset ###
 
-        def __call__(self, img, bboxes):
-            for t in self.transforms:
-                img, bboxes = t(img), bboxes
+    # csv_file = "faceYoloData.csv"
+    # img_dir = "images"
+    # label_dir = "labels"
+    # data_dir = "data"
+    # batch_size = 1
+    #
+    # transform = Compose([T.Resize((448, 448)), T.ToTensor()])
+    # dataset = faceYoloDataset(
+    #     csv_file,
+    #     transform=transform,
+    #     img_dir=img_dir,
+    #     label_dir=label_dir,
+    #     data_dir=data_dir
+    # )
+    # print(len(dataset))
+    # train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    # for x, y in train_loader:
+    #     for idx in range(batch_size):
+    #         bboxes = cellboxes_to_boxes(y)
+    #         bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5,
+    #                                      threshold=0.4, box_format="midpoint")
+    #         plot_image(x[idx].permute(1, 2, 0).to("cpu"), bboxes)
+    #     break
 
-            return img, bboxes
+    ### WIDER FACE Dataset ###
 
-    transform = Compose([transforms.Resize((448, 448)), transforms.ToTensor()])
-    dataset = faceYoloDataset(
-        "faceYoloData.csv",
-        transform=transform,
-        img_dir=img_dir,
-        label_dir=label_dir,
-        data_dir="data"
-    )
-    print(len(dataset))
-    data = WIDERFace(root="data/", split="val", transform=transform)
-    batch_size = 10
-    train_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
-    for x, y in train_loader:
-        for idx in range(10):
-            bboxes = cellboxes_to_boxes(y)
-            bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5,
-                                         threshold=0.4, box_format="midpoint")
-            plot_image(x[idx].permute(1, 2, 0).to("cpu"), bboxes)
+    transform_train = Compose2(train=True)
+    transform_test = Compose2(train=False)
+    train_data = WIDERFace(root="data/", split="train", transform=transform_train)
+    test_data = WIDERFace(root="data/", split="val", transform=transform_test)
+    def collate_fn(batch):
+        return tuple(zip(*batch))
+    def show(imgs):
+        if not isinstance(imgs, list):
+            imgs = [imgs]
+        fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
+        for i, img in enumerate(imgs):
+            img = img.detach()
+            img = FT.to_pil_image(img)
+            axs[0, i].imshow(np.asarray(img))
+            axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+            img.save("image_example.png")
 
+    batch_size = 3
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,
+                              collate_fn=collate_fn)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True,
+                             collate_fn=collate_fn)
+
+    for images, targets in test_loader:
+        images = list(image for image in images)
+        targets = [{k: torch.tensor(v) for k, v in t.items()} for t
+                   in targets]
+        for i in range(len(images)):
+            img = images[i]
+            target = targets[i]["boxes"]
+            target *= 400
+            img_int = torch.tensor(img * 255, dtype=torch.uint8)
+            drawn_boxes = draw_bounding_boxes(img_int, target)
+            show(drawn_boxes)
         break
+
 
 if __name__ == "__main__":
     main()
