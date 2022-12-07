@@ -31,11 +31,11 @@ seed = 123
 torch.manual_seed(seed)
 
 # Hyperparameters etc.
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-5
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 50
+BATCH_SIZE = 30
 WEIGHT_DECAY = 0
-EPOCHS = 100
+EPOCHS = 50
 NUM_WORKERS = 4
 PIN_MEMORY = True
 LOAD_MODEL = True

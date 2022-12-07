@@ -10,7 +10,7 @@ from os.path import abspath, expanduser
 from typing import Dict, List, Union
 import numpy as np
 
-class faceYoloDataset(Dataset):
+class faceYoloDataset(Datasset):
     def __init__(self, csv_file, img_dir, label_dir, data_dir, S=7, B=2, C=2, transform=None):
         self.annotations = pd.read_csv(os.path.join(data_dir,csv_file))
         self.img_dir = os.path.join(data_dir, img_dir)

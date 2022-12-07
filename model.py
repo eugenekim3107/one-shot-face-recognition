@@ -119,7 +119,7 @@ class Yolov1(nn.Module):
         )
 
 def main():
-    model = Yolov1(split_size=7, num_boxes=2, num_classes=2)
+    model = Yolov1(split_size=, num_boxes=2, num_classes=2)
     x = torch.randn((5, 3, 448, 448))
     print(model(x).shape)
 
