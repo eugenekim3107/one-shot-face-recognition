@@ -107,14 +107,18 @@ class WIDERFace(Dataset):
 
     def __getitem__(self, index: int):
         img = Image.open(self.img_info[index]["img_path"]).convert("RGB")
+        boxes = self.img_info[index]["annotations"]["bbox"]
+
         img_shape = np.array(img)
         img_h = img_shape.shape[0]
         img_w = img_shape.shape[1]
-        boxes = self.img_info[index]["annotations"]["bbox"]
         boxes[:, 0] /= img_w
         boxes[:, 1] /= img_h
         boxes[:, 2] /= img_w
         boxes[:, 3] /= img_h
+
+        if self.transform:
+            img, boxes = self.transform(img, boxes)
 
         new_boxes = []  # convert from xywh to xyxy
         for box in boxes:
@@ -126,11 +130,9 @@ class WIDERFace(Dataset):
 
         new_boxes = torch.tensor(new_boxes, dtype=torch.float32)
 
-        if self.transform is not None:
-            img, new_boxes = self.transform(img, new_boxes)
-
         label = {"boxes": new_boxes,
-                 "label": torch.tensor([0 for i in range(new_boxes.size(0))])}
+                 "labels": torch.tensor([0 for i in range(new_boxes.size(0))],
+                                       dtype=torch.int64)}
         return img, label
 
     def __len__(self):
@@ -198,20 +200,12 @@ class Compose(object):
         return img, bboxes
 
 class Compose2(object):
-    def __init__(self, train=False):
-        if train:
-            self.transforms = [
-                T.Resize(size=(400, 400)),
-                T.ToTensor(),
-                T.RandomHorizontalFlip(p=0.3),
-                T.RandomVerticalFlip(p=0.3),
-            ]
-        else:
-            self.transforms = [T.Resize(size=(400, 400)), T.ToTensor()]
+    def __init__(self):
+        self.transforms = [T.Resize(size=(400, 400)), T.ToTensor()]
 
     def __call__(self, img, bboxes):
         for t in self.transforms:
-            img, bboxes = t(img), bboxes
+            img = t(img)
 
         return img, bboxes
 

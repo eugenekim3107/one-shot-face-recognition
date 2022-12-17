@@ -25,10 +25,12 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from dataset import WIDERFace, Compose2
 import vessl
 
+vessl.init()
+
 # Hyperparameters
 LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 30
+BATCH_SIZE = 15
 WEIGHT_DECAY = 1e-4
 MOMENTUM = 0.9
 EPOCHS = 50
@@ -39,14 +41,6 @@ LOAD_MODEL_FILE = "model1.pth.tar"
 IMG_DIR = "images"
 LABEL_DIR = "labels"
 DIR_NAME = "output"
-
-model = models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
-n_classes = 1
-in_features = model.roi_heads.box_predictor.cls_score.in_features # we need to change the head
-model.roi_heads.box_predictor = models.detection.faster_rcnn.FastRCNNPredictor(in_features, n_classes)
-
-params = [p for p in model.parameters() if p.requires_grad]
-optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=MOMENTUM, nesterov=True, weight_decay=WEIGHT_DECAY)
 
 def train_one_epoch(model, optimizer, loader, device, epoch):
     model.to(device)
@@ -81,13 +75,100 @@ def train_one_epoch(model, optimizer, loader, device, epoch):
         optimizer.step()
 
     all_losses_dict = pd.DataFrame(all_losses_dict)
+
+    vessl.log(
+        step=epoch + 1,
+        payload={'train_loss': np.mean(all_losses)}
+    )
+
+    vessl.log(
+        step=epoch + 1,
+        payload={'train_mAP': np.mean(all_mAP)}
+    )
+
     print(
         "Epoch {}, lr: {:.6f}, loss: {:.6f}, loss_box: {:.6f}, loss_rpn_box: {:.6f}, loss_object: {:.6f}, mAP: {:.6f}".format(
             epoch, optimizer.param_groups[0]['lr'], np.mean(all_losses),
             all_losses_dict['loss_box_reg'].mean(),
             all_losses_dict['loss_rpn_box_reg'].mean(),
             all_losses_dict['loss_objectness'].mean(),
-            map
+            np.mean(all_mAP)
         ))
 
+def test_one_epoch(model, loader, device, epoch):
+    model.to(device)
+    model.eval()
+    all_losses = []
+    all_losses_dict = []
+    all_mAP = []
+    for images, targets in tqdm(loader):
+        images = list(image.to(device) for image in images)
+        targets = [{k: torch.tensor(v).to(device) for k, v in t.items()} for t
+                   in targets]
+
+        loss_dict = model(images,
+                          targets)  # the model computes the loss automatically if we pass in targets
+        losses = sum(loss for loss in loss_dict.values())
+        loss_dict_append = {k: v.item() for k, v in loss_dict.items()}
+        loss_value = losses.item()
+
+        all_losses.append(loss_value)
+        all_losses_dict.append(loss_dict_append)
+
+        preds = model(images)
+        metric = MeanAveragePrecision()
+        metric.update(preds, targets)
+        map = metric.compute()["map"]
+        all_mAP.append(map)
+
+    all_losses_dict = pd.DataFrame(all_losses_dict)
+
+    vessl.log(
+        step=epoch + 1,
+        payload={'test_loss': np.mean(all_losses)}
+    )
+
+    vessl.log(
+        step=epoch + 1,
+        payload={'test_mAP': np.mean(all_mAP)}
+    )
+
+    print(
+        "Epoch {}, lr: {:.6f}, loss: {:.6f}, loss_box: {:.6f}, loss_rpn_box: {:.6f}, loss_object: {:.6f}, mAP: {:.6f}".format(
+            epoch, optimizer.param_groups[0]['lr'], np.mean(all_losses),
+            all_losses_dict['loss_box_reg'].mean(),
+            all_losses_dict['loss_rpn_box_reg'].mean(),
+            all_losses_dict['loss_objectness'].mean(),
+            np.mean(all_mAP)
+        ))
+
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+def main():
+    torch.cuda.empty_cache()
+    model = models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
+    n_classes = 1
+    in_features = model.roi_heads.box_predictor.cls_score.in_features  # we need to change the head
+    model.roi_heads.box_predictor = models.detection.faster_rcnn.FastRCNNPredictor(
+        in_features, n_classes)
+
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=MOMENTUM,
+                                nesterov=True, weight_decay=WEIGHT_DECAY)
+
+    transform = Compose2()
+    train_data = WIDERFace(root="data/data", split="train", transform=transform)
+    test_data = WIDERFace(root="data/data", split="val", transform=transform)
+
+    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
+    test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate_fn)
+
+    for epoch in range(EPOCHS):
+        train_one_epoch(model, optimizer, train_loader, DEVICE, epoch)
+        test_one_epoch(model, test_loader, DEVICE, epoch)
+
+if __name__ == "__main__":
+    main()
 
