@@ -2,7 +2,7 @@ import torch
 import os
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from torchvision.transforms import functional as FT
+from torchvision.transforms import functional as F
 import pandas as pd
 from torchvision import transforms as T
 from PIL import Image
@@ -189,6 +189,54 @@ class WIDERFace(Dataset):
                     raise RuntimeError(
                         f"Error parsing annotation file {filepath}")
 
+
+class SiameseNetworkDataset(Dataset):
+
+    def __init__(self, imageFolderDataset, transform=None, should_invert=True):
+        self.imageFolderDataset = imageFolderDataset
+        self.transform = transform
+        self.should_invert = should_invert
+
+    def __getitem__(self, index):
+        img0_tuple = self.imageFolderDataset.imgs[
+            np.random.choice(len(self.imageFolderDataset.imgs))]
+        # we need to make sure approx 50% of images are in the same class
+        should_get_same_class = np.random.randint(0, 2)
+        if should_get_same_class:
+            while True:
+                # keep looping till the same class image is found
+                img1_tuple = self.imageFolderDataset.imgs[
+                    np.random.choice(len(self.imageFolderDataset.imgs))]
+                if img0_tuple[1] == img1_tuple[1]:
+                    break
+        else:
+            while True:
+                # keep looping till a different class image is found
+
+                img1_tuple = self.imageFolderDataset.imgs[
+                    np.random.choice(len(self.imageFolderDataset.imgs))]
+                if img0_tuple[1] != img1_tuple[1]:
+                    break
+
+        img0 = Image.open(img0_tuple[0])
+        img1 = Image.open(img1_tuple[0])
+        img0 = img0.convert("L")
+        img1 = img1.convert("L")
+
+        if self.should_invert:
+            img0 = PIL.ImageOps.invert(img0)
+            img1 = PIL.ImageOps.invert(img1)
+
+        if self.transform is not None:
+            img0 = self.transform(img0)
+            img1 = self.transform(img1)
+
+        return img0, img1, torch.from_numpy(
+            np.array([int(img1_tuple[1] != img0_tuple[1])], dtype=np.float32))
+
+    def __len__(self):
+        return len(self.imageFolderDataset.imgs)
+
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -241,40 +289,40 @@ def main():
 
     ### WIDER FACE Dataset ###
 
-    transform_train = Compose2(train=True)
-    transform_test = Compose2(train=False)
-    train_data = WIDERFace(root="data/", split="train", transform=transform_train)
-    test_data = WIDERFace(root="data/", split="val", transform=transform_test)
+    transform = Compose2()
+    train_data = WIDERFace(root="data/", split="train", transform=transform)
+    test_data = WIDERFace(root="data/", split="val", transform=transform)
+
     def collate_fn(batch):
         return tuple(zip(*batch))
+
+    batch_size = 1
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,
+                              collate_fn=collate_fn)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False,
+                             collate_fn=collate_fn)
+
     def show(imgs):
         if not isinstance(imgs, list):
             imgs = [imgs]
         fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
         for i, img in enumerate(imgs):
             img = img.detach()
-            img = FT.to_pil_image(img)
+            img = F.to_pil_image(img)
             axs[0, i].imshow(np.asarray(img))
             axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-            img.save("image_example.png")
 
-    batch_size = 3
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,
-                              collate_fn=collate_fn)
-    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True,
-                             collate_fn=collate_fn)
+    images, targets = next(iter(train_loader))
+    images = list(image for image in images)
+    targets = [{k: v for k, v in t.items()} for t in targets]
+    images_test, targets_test = next(iter(test_loader))
+    images_test = list(image for image in images_test)
+    targets_test = [{k: v for k, v in t.items()} for t in targets_test]
+    print(targets_test[0])
 
-    for images, targets in test_loader:
-        images = list(image for image in images)
-        targets = [{k: torch.tensor(v) for k, v in t.items()} for t
-                   in targets]
-        for i in range(len(images)):
-            img = images[i]
-            target = targets[i]["boxes"]
-            target *= 400
-            img_int = torch.tensor(img * 255, dtype=torch.uint8)
-            drawn_boxes = draw_bounding_boxes(img_int, target)
-            show(drawn_boxes)
+    for i, (x, y) in enumerate(test_loader):
+        boxes = y[0]["boxes"]
+        show(draw_bounding_boxes((x[0]*255).type(torch.uint8), (boxes*400)))
         break
 
 
