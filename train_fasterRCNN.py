@@ -14,40 +14,23 @@ import math
 from PIL import Image
 import cv2
 import matplotlib.pyplot as plt
-from collections import defaultdict, deque
-import datetime
-import time
 from tqdm import tqdm
 from torchvision.utils import draw_bounding_boxes
 from os.path import abspath, expanduser
 from typing import Dict, List, Union
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-from dataset import WIDERFace, Compose2
-import vessl
+from dataset import faceDatasetFasterRCNN
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
-vessl.init()
-
-# Hyperparameters
-LEARNING_RATE = 1e-4
-DEVICE = "cuda" if torch.cuda.is_available else "cpu"
-BATCH_SIZE = 15
-WEIGHT_DECAY = 1e-4
-MOMENTUM = 0.9
-EPOCHS = 50
-NUM_WORKERS = 4
-PIN_MEMORY = True
-LOAD_MODEL = True
-LOAD_MODEL_FILE = "model1.pth.tar"
-IMG_DIR = "images"
-LABEL_DIR = "labels"
-DIR_NAME = "output"
 
 def train_one_epoch(model, optimizer, loader, device, epoch):
     model.to(device)
     model.train()
+
     all_losses = []
     all_losses_dict = []
-    all_mAP = []
+
     for images, targets in tqdm(loader):
         images = list(image.to(device) for image in images)
         targets = [{k: torch.tensor(v).to(device) for k, v in t.items()} for t
@@ -62,112 +45,97 @@ def train_one_epoch(model, optimizer, loader, device, epoch):
         all_losses.append(loss_value)
         all_losses_dict.append(loss_dict_append)
 
-        model.eval()
-        preds = model(images)
-        metric = MeanAveragePrecision()
-        metric.update(preds, targets)
-        map = metric.compute()["map"]
-        all_mAP.append(map)
-        model.train()
+        if not math.isfinite(loss_value):
+            print(
+                f"Loss is {loss_value}, stopping trainig")  # train if loss becomes infinity
+            print(loss_dict)
+            sys.exit(1)
 
         optimizer.zero_grad()
         losses.backward()
         optimizer.step()
 
-    all_losses_dict = pd.DataFrame(all_losses_dict)
-
-    vessl.log(
-        step=epoch + 1,
-        payload={'train_loss': np.mean(all_losses)}
-    )
-
-    vessl.log(
-        step=epoch + 1,
-        payload={'train_mAP': np.mean(all_mAP)}
-    )
-
+    all_losses_dict = pd.DataFrame(all_losses_dict)  # for printing
     print(
-        "Epoch {}, lr: {:.6f}, loss: {:.6f}, loss_box: {:.6f}, loss_rpn_box: {:.6f}, loss_object: {:.6f}, mAP: {:.6f}".format(
+        "Epoch {}, lr: {:.6f}, loss: {:.6f}, loss_classifier: {:.6f}, loss_box: {:.6f}, loss_rpn_box: {:.6f}, loss_object: {:.6f}".format(
             epoch, optimizer.param_groups[0]['lr'], np.mean(all_losses),
+            all_losses_dict['loss_classifier'].mean(),
             all_losses_dict['loss_box_reg'].mean(),
             all_losses_dict['loss_rpn_box_reg'].mean(),
-            all_losses_dict['loss_objectness'].mean(),
-            np.mean(all_mAP)
+            all_losses_dict['loss_objectness'].mean()
         ))
+
 
 def test_one_epoch(model, loader, device, epoch):
-    model.to(device)
     model.eval()
-    all_losses = []
-    all_losses_dict = []
+    model.to(device)
+    metric = MeanAveragePrecision(box_format="xywh", iou_type="bbox")
+    metric.to(device)
+
     all_mAP = []
-    for images, targets in tqdm(loader):
-        images = list(image.to(device) for image in images)
-        targets = [{k: torch.tensor(v).to(device) for k, v in t.items()} for t
-                   in targets]
 
-        loss_dict = model(images,
-                          targets)  # the model computes the loss automatically if we pass in targets
-        losses = sum(loss for loss in loss_dict.values())
-        loss_dict_append = {k: v.item() for k, v in loss_dict.items()}
-        loss_value = losses.item()
+    with torch.no_grad():
+        for images, targets in tqdm(loader):
+            images = list(image.to(device) for image in images)
+            targets = [{k: torch.tensor(v).to(device) for k, v in t.items()} for
+                       t in targets]
 
-        all_losses.append(loss_value)
-        all_losses_dict.append(loss_dict_append)
+            predictions = model(images)
+            metric.update(predictions, targets)
+            single_mAP = metric.compute()
+            all_mAP.append(single_mAP)
 
-        preds = model(images)
-        metric = MeanAveragePrecision()
-        metric.update(preds, targets)
-        map = metric.compute()["map"]
-        all_mAP.append(map)
+    all_mAP = pd.DataFrame(all_mAP)
+    print("Epoch {}, mAP: {:.6f}".format(
+        epoch, all_mAP["map"].mean()
+    ))
 
-    all_losses_dict = pd.DataFrame(all_losses_dict)
-
-    vessl.log(
-        step=epoch + 1,
-        payload={'test_loss': np.mean(all_losses)}
-    )
-
-    vessl.log(
-        step=epoch + 1,
-        payload={'test_mAP': np.mean(all_mAP)}
-    )
-
-    print(
-        "Epoch {}, lr: {:.6f}, loss: {:.6f}, loss_box: {:.6f}, loss_rpn_box: {:.6f}, loss_object: {:.6f}, mAP: {:.6f}".format(
-            epoch, optimizer.param_groups[0]['lr'], np.mean(all_losses),
-            all_losses_dict['loss_box_reg'].mean(),
-            all_losses_dict['loss_rpn_box_reg'].mean(),
-            all_losses_dict['loss_objectness'].mean(),
-            np.mean(all_mAP)
-        ))
-
-
+def get_transforms(train=False):
+    if train:
+        transform = A.Compose([
+            A.Resize(600, 600), # our input size can be 600px
+            A.HorizontalFlip(p=0.3),
+            A.VerticalFlip(p=0.3),
+            A.RandomBrightnessContrast(p=0.1),
+            A.ColorJitter(p=0.1),
+            ToTensorV2()
+        ], bbox_params=A.BboxParams(format='coco'))
+    else:
+        transform = A.Compose([
+            A.Resize(600, 600), # our input size can be 600px
+            ToTensorV2()
+        ], bbox_params=A.BboxParams(format='coco'))
+    return transform
+def collate_fn(batch):
+    return tuple(zip(*batch))
 def collate_fn(batch):
     return tuple(zip(*batch))
 
 def main():
+    data = faceDatasetFasterRCNN("faceYoloData.csv", "images", "labels", "data",
+                           transforms=get_transforms(True))
+    train_data, test_data = torch.utils.data.random_split(data, [
+        int(0.8 * len(data)) + 1, int(0.2 * len(data))])
+    train_loader = DataLoader(train_data, batch_size=4, shuffle=True,
+                              collate_fn=collate_fn)
+    test_loader = DataLoader(test_data, batch_size=4, shuffle=False,
+                             collate_fn=collate_fn)
     torch.cuda.empty_cache()
     model = models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
-    n_classes = 1
     in_features = model.roi_heads.box_predictor.cls_score.in_features  # we need to change the head
+    n_classes = 3
     model.roi_heads.box_predictor = models.detection.faster_rcnn.FastRCNNPredictor(
         in_features, n_classes)
-
+    device = torch.device("cuda")
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=MOMENTUM,
-                                nesterov=True, weight_decay=WEIGHT_DECAY)
+    optimizer = torch.optim.SGD(params, lr=0.001, momentum=0.9, nesterov=True,
+                                weight_decay=1e-4)
 
-    transform = Compose2()
-    train_data = WIDERFace(root="data/data", split="train", transform=transform)
-    test_data = WIDERFace(root="data/data", split="val", transform=transform)
+    num_epochs = 20
+    for epoch in range(num_epochs):
+        train_one_epoch(model, optimizer, train_loader, device, epoch)
+        test_one_epoch(model, test_loader, device, epoch)
 
-    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
-    test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate_fn)
-
-    for epoch in range(EPOCHS):
-        train_one_epoch(model, optimizer, train_loader, DEVICE, epoch)
-        test_one_epoch(model, test_loader, DEVICE, epoch)
 
 if __name__ == "__main__":
     main()

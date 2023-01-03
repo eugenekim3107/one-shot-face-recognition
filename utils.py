@@ -4,6 +4,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from collections import Counter
 import os
+import cv2
+from PIL import Image
+from torch.nn import functional as F
+from torch.autograd import Variable
+import torchvision
+
 
 
 def intersection_over_union(boxes_preds, boxes_labels, box_format="midpoint"):
@@ -229,6 +235,29 @@ def plot_image(image, boxes):
 
     plt.show()
 
+def get_face(image, boxes, folder_name):
+    """Plots predicted bounding boxes on the image"""
+    im = np.array(image)
+    height, width, _ = im.shape
+
+    # box[0] is x midpoint, box[2] is width
+    # box[1] is y midpoint, box[3] is height
+
+    # Create a Rectangle potch
+    for i,box in enumerate(boxes):
+        box = box[2:]
+        assert len(box) == 4, "Got more values than in x, y, w, h, in a box!"
+        upper_left_x = box[0] - box[2] / 2
+        upper_left_y = box[1] - box[3] / 2
+        x1 = int(upper_left_x * width)
+        y1 = int(upper_left_y * height)
+        x2 = int(x1 + (box[2] * width))
+        y2 = int(y1 + (box[3] * height))
+        img = (image[y1:y2, x1:x2, :]*255).numpy()
+        cv2.imwrite(os.path.join(folder_name,f"{i}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+        plt.imshow(image[y1:y2, x1:x2, :])
+        plt.show()
+
 
 def get_bboxes(
         loader,
@@ -352,3 +381,29 @@ def load_checkpoint(checkpoint, model, optimizer):
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     return checkpoint["start_epoch"]
+
+def face_verification(query_image,support_set,transform,net):
+    query_image = Image.open(query_image)
+    query_image = transform(query_image.convert("L")).unsqueeze(0)
+    lowest_score = np.inf
+    lowest_idx = None
+
+    for i in os.listdir(support_set):
+        if not i.endswith(".jpg"):
+            continue
+        img0 = Image.open(os.path.join(support_set,i))
+        img0 = transform(img0.convert("L")).unsqueeze(0)
+        concatenated = torch.cat((query_image, img0), 0)
+
+        output1, output2 = net(Variable(query_image), Variable(img0))
+        euclidean_distance = F.pairwise_distance(output1, output2)
+        if euclidean_distance.item() < lowest_score:
+            lowest_score = euclidean_distance
+            lowest_idx = int(i[:-4])
+
+        plt.title('Dissimilarity: {:.2f}'.format(euclidean_distance.item()))
+        plt.imshow(torchvision.utils.make_grid(concatenated).permute(1,2,0))
+        plt.show()
+
+    return lowest_score, lowest_idx
+

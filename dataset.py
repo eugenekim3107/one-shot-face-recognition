@@ -12,6 +12,8 @@ from typing import Dict, List, Union
 import numpy as np
 from torchvision.utils import draw_bounding_boxes
 import matplotlib.pyplot as plt
+from torchvision import datasets, models
+
 
 class faceYoloDataset(Dataset):
     def __init__(self, csv_file, img_dir, label_dir, data_dir, S=7, B=2, C=2, transform=None):
@@ -88,6 +90,65 @@ class faceYoloDataset(Dataset):
                 # Set one hot encoding for class_label
                 label_matrix[i, j, class_label] = 1
         return image, label_matrix
+
+
+class faceDatasetFasterRCNN(datasets.VisionDataset):
+    def __init__(self, csv_file, img_dir, label_dir, data_dir, transform=None,
+                 target_transform=None, transforms=None):
+        self.annotations = pd.read_csv(os.path.join(data_dir, csv_file))
+        self.img_dir = os.path.join(data_dir, img_dir)
+        self.label_dir = os.path.join(data_dir, label_dir)
+        self.transform = transform
+        self.target_transform = target_transform
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.annotations)
+
+    def __getitem__(self, index):
+        label_path = os.path.join(self.label_dir,
+                                  self.annotations.iloc[index, 1])
+        boxes = []
+        labels = []
+
+        img_path = os.path.join(self.img_dir, self.annotations.iloc[index, 0])
+
+        image = cv2.imread(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        h, w = image.shape[0], image.shape[1]
+
+        with open(label_path) as f:
+            for label in f.readlines():
+                class_label, x, y, width, height = [
+                    float(x) if float(x) != int(float(x)) else int(x)
+                    for x in label.replace("\n", "").split()
+                ]
+                boxes.append(
+                    [(x - (width / 2)) * w, (y - (height / 2)) * h, width * w,
+                     height * h, int(class_label + 1)])
+                labels.append(int(class_label + 1))
+
+        labels = torch.tensor(labels, dtype=torch.int64, requires_grad=False)
+
+        if self.transforms is not None:
+            transformed = self.transforms(image=image, bboxes=boxes)
+
+        image = transformed['image']
+        boxes = transformed['bboxes']
+
+        new_boxes = []
+        for box in boxes:
+            xmin = box[0]
+            xmax = xmin + box[2]
+            ymin = box[1]
+            ymax = ymin + box[3]
+            new_boxes.append([xmin, ymin, xmax, ymax])
+
+        boxes = torch.tensor(new_boxes, dtype=torch.float32)
+
+        # Convert To Cells
+        label = {"boxes": boxes, "labels": labels}
+        return image.div(255), label
 
 
 class WIDERFace(Dataset):
