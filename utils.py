@@ -258,6 +258,22 @@ def get_face(image, boxes, folder_name):
         plt.imshow(image[y1:y2, x1:x2, :])
         plt.show()
 
+def get_face2(image, boxes, folder_name):
+    im = np.array(image)
+    height, width, _ = im.shape
+
+    for i, box in enumerate(boxes):
+        x1 = int(box[0])
+        y1 = int(box[1])
+        x2 = int(box[2])
+        y2 = int(box[3])
+        img = image[y1:y2, x1:x2, :].numpy()
+        plt.imsave(os.path.join(folder_name, f"{i}.jpg"),
+                    img)
+        plt.imshow(image[y1:y2, x1:x2, :])
+        plt.show()
+
+
 
 def get_bboxes(
         loader,
