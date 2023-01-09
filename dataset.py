@@ -12,7 +12,7 @@ from typing import Dict, List, Union
 import numpy as np
 from torchvision.utils import draw_bounding_boxes
 import matplotlib.pyplot as plt
-from torchvision import datasets, models
+from torchvision import datasets
 
 
 class faceYoloDataset(Dataset):
