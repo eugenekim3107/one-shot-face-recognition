@@ -2,7 +2,7 @@ import argparse
 import os
 import torch
 import matplotlib.pyplot as plt
-from model import SiameseNetwork
+from model import SiameseNetwork, resnet34
 from torchvision import models
 from torch.autograd import Variable
 import cv2
@@ -34,7 +34,7 @@ parser.add_argument(
 def get_transforms(train=False):
     if train:
         transform = A.Compose([
-            A.Resize(600, 600), # our input size can be 600px
+            A.Resize(800, 800),
             A.HorizontalFlip(p=0.3),
             A.VerticalFlip(p=0.3),
             A.RandomBrightnessContrast(p=0.1),
@@ -43,7 +43,7 @@ def get_transforms(train=False):
         ], bbox_params=A.BboxParams(format='coco'))
     else:
         transform = A.Compose([
-            A.Resize(600, 600), # our input size can be 600px
+            A.Resize(800, 800),
             ToTensorV2()
         ], bbox_params=A.BboxParams(format='coco'))
     return transform
@@ -96,6 +96,8 @@ def main(args):
 
     group_image = Image.open(args.group_image).convert("RGB")
     query_image = Image.open(args.query_image).convert("RGB")
+    h,w,c = np.array(group_image).shape
+    ratio = h/w
 
     # Create fasterRCNN model and siamese model
     fasterRCNN_model = models.detection.fasterrcnn_mobilenet_v3_large_fpn(
@@ -105,6 +107,7 @@ def main(args):
     fasterRCNN_model.roi_heads.box_predictor = models.detection.faster_rcnn.FastRCNNPredictor(
         in_features, n_classes)
     siamese_model = SiameseNetwork()
+    # resnet34_model = resnet34()
 
     # Load state for both models
     checkpoint = torch.load("load_models/fasterRCNNstate.pth.tar",
@@ -112,6 +115,7 @@ def main(args):
     fasterRCNN_model.load_state_dict(checkpoint)
     checkpoint = torch.load("load_models/siamesestate.pth.tar",
                             map_location=torch.device("cpu"))
+    # resnet34_model.load_state_dict(checkpoint)
     siamese_model.load_state_dict(checkpoint)
 
     # transform group_image
@@ -127,17 +131,24 @@ def main(args):
 
     # Evaluate dissimilarity score for each image in support set and find best match
     lowest_score, lowest_idx = siamese(model=siamese_model, query_image=query_image, support_set=support_set)
+    # lowest_score, lowest_idx = siamese(model=resnet34_model,
+    #                                    query_image=query_image,
+    #                                    support_set=support_set)
 
     # Return the image with best bounding box
     final = torch.unsqueeze(pred["boxes"][lowest_idx], 0)
     group_image = group_image.clone().detach() * 255
     group_image = group_image.to(torch.uint8)
-    plt.figure(figsize=(14, 10))
+    fig = plt.figure(frameon=False)
+    fig.set_size_inches(15, int(15*ratio))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
     plt.imshow(draw_bounding_boxes(group_image, final, labels=[args.name],
                                    font='~/Library/Fonts/Arial.ttf',
                                    font_size=20,
                                    width=3,
-                                   colors="red").permute(1, 2, 0))
+                                   colors="red").permute(1, 2, 0), aspect='auto')
     plt.savefig("test.jpg")
 
 if __name__ == '__main__':

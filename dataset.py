@@ -2,7 +2,7 @@ import torch
 import os
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from torchvision.transforms import functional as F
+from torchvision.transfo67rms import functional as F
 import pandas as pd
 from torchvision import transforms as T
 from PIL import Image
