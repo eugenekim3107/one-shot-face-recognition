@@ -321,6 +321,47 @@ def resnet152():
     """
     return ResNet(BottleNeck, [3, 8, 36, 3])
 
+class SiameseNetwork2(nn.Module):
+    def __init__(self):
+        super(SiameseNetwork2, self).__init__()
+        self.cnn1 = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(1, 4, kernel_size=3),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(4),
+
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(4, 8, kernel_size=3),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(8),
+
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(8, 8, kernel_size=3),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(8),
+
+        )
+
+        self.fc1 = nn.Sequential(
+            nn.Linear(8 * 100 * 100, 100),
+            nn.ReLU(inplace=True),
+
+#             nn.Linear(200, 100),
+#             nn.ReLU(inplace=True),
+
+            nn.Linear(100, 5))
+
+    def forward_once(self, x):
+        output = self.cnn1(x)
+        output = output.view(output.size()[0], -1)
+        output = self.fc1(output)
+        return output
+
+    def forward(self, input1, input2):
+        output1 = self.forward_once(input1)
+        output2 = self.forward_once(input2)
+        return output1, output2
+
 def main():
     model = Yolov1(split_size=7, num_boxes=2, num_classes=2)
     x = torch.randn((5, 3, 448, 448))

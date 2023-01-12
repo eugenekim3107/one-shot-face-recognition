@@ -2,7 +2,7 @@ import argparse
 import os
 import torch
 import matplotlib.pyplot as plt
-from model import SiameseNetwork, resnet34
+from model import SiameseNetwork, resnet34, SiameseNetwork2
 from torchvision import models
 from torch.autograd import Variable
 import cv2
@@ -125,9 +125,10 @@ def main(args):
 
     # Retrieve bounding boxes from face localization
     pred = fasterRCNN(fasterRCNN_model, group_image)
-    threshold = 0.8
+    threshold = 0.75
     boxes = pred["boxes"][pred["scores"] > threshold]
     support_set = get_faces(group_image, boxes)
+    print(len(support_set))
 
     # Evaluate dissimilarity score for each image in support set and find best match
     lowest_score, lowest_idx = siamese(model=siamese_model, query_image=query_image, support_set=support_set)
