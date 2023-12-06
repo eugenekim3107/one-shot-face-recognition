@@ -8,10 +8,21 @@ The one shot face recognition application identifies an individual's face within
 - Retail and Marketing: In retail environments, it could be used for personalized advertising or customer service by recognizing returning customers.
 - Workplace Management: Monitoring attendance and tracking employee movements in large office spaces or factories.
 ## How it works?
-Two required inputs: a portrait of an individual and the group photo
+Required inputs: a portrait of an individual and the group photo
+
 Additional inputs: the name of the individual
-Demo Inputs:
-Name: Joseph
-![query image](demo_images/joseph_head.png "Portrait of an individual")
-![group image](demo_images/joseph_group.png "Group photo")
-Output:
+
+Output: Group image with a box around the individual's face
+## Demo
+
+#### Name of the Individual:
+Joseph
+
+#### Portrait of the Individual:
+<img src="demo_images/joseph_head.png" alt="Portrait of Joseph" title="Portrait of Joseph" width="250"/>
+
+#### Group Photo:
+<img src="demo_images/joseph_group.png" alt="Group photo including Joseph" title="Group photo including Joseph" width="250"/>
+
+### Output
+<img src="demo_images/output_img.jpg" alt="Output image" title="Output Image" width="250"/>
